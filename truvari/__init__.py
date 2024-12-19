@@ -126,6 +126,7 @@ from truvari.comparisons import (
     seqsim,
     sizesim,
     unroll_compare,
+    entry_overlaps_tree,
 )
 
 from truvari.matching import (

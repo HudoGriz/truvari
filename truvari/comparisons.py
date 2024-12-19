@@ -429,6 +429,15 @@ def entry_within_tree(entry, tree):
 
     return truvari.coords_within(qstart, qend, m_ovl.begin, m_ovl.end - 1, end_within)
 
+def entry_overlaps_tree(entry, tree):
+    """
+    Figure out if an entry overlaps with any tree bundaries
+    """
+    qstart, qend = truvari.entry_boundaries(entry)
+
+    m_ovl = tree[entry.chrom].overlap(qstart, qend)
+    return len(m_ovl) > 0
+
 def entry_within(entry, rstart, rend):
     """
     Extract entry boundaries and type to call `coords_within`

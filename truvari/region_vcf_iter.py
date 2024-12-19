@@ -123,18 +123,18 @@ def build_anno_tree(filename, chrom_col=0, start_col=1, end_col=2, one_based=Fal
     return tree, idx
 
 
-def region_filter(vcf, tree, inside=True, with_region=False):
+def region_filter(vcf, tree, inside=True, with_region=False, bench_overlaps=False):
     """
     Chooses to stream or fetch entries inside/outside a VCF
     If the VCF is over 25Mb or the number of regions is above 1k, use stream
     """
     sz = os.stat(vcf.filename)
-    if not inside or sz.st_size > (25 *  2**20) or sum(len(_) for _ in tree.values()) > 1000:
+    if (not inside or sz.st_size > (25 *  2**20) or sum(len(_) for _ in tree.values()) > 1000) and not bench_overlaps:
         return region_filter_stream(vcf, tree, inside, with_region)
 
-    return region_filter_fetch(vcf, tree, with_region)
+    return region_filter_fetch(vcf, tree, with_region, overlap=bench_overlaps)
 
-def region_filter_fetch(vcf, tree, with_region=False):
+def region_filter_fetch(vcf, tree, with_region=False, overlap=False):
     """
     Given a VariantRecord iter and defaultdict(IntervalTree),
     yield variants which are inside/outside the tree regions
@@ -142,13 +142,23 @@ def region_filter_fetch(vcf, tree, with_region=False):
     with_region returns (entry, (chrom, Interval))
     Can only check for variants within a region
     """
+    seen = set()
+
     ret_type = (lambda x, y, z: (x, (y, z))) if with_region else (lambda x, y, z: x)
     for chrom in sorted(tree.keys()):
         for intv in sorted(tree[chrom]):
             try:
                 for entry in vcf.fetch(chrom, intv.begin, intv.end):
-                    if truvari.entry_within(entry, intv.begin, intv.end - 1):
-                        yield ret_type(entry, chrom, intv)
+                    if not overlap:
+                        if truvari.entry_within(entry, intv.begin, intv.end - 1):
+                            yield ret_type(entry, chrom, intv)
+                    else:
+                        qstart, qend = truvari.entry_boundaries(entry)
+                        if truvari.overlaps(qstart, qend, intv.begin, intv.end - 1):
+                            entry_key = (entry.chrom, entry.pos, entry.id)
+                            if entry_key not in seen:
+                                seen.add(entry_key)
+                                yield ret_type(entry, chrom, intv)
             except ValueError:
                 logging.warning("Unable to fetch %s from %s",
                                 chrom, vcf.filename)
